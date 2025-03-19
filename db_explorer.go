@@ -42,12 +42,13 @@ func (h DbExplorer) IdNameInnitialization(tableName string, w http.ResponseWrite
 	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT 1", tableName)
 	rows, err := h.DB.Query(query)
 	__err_500(err, w)
-	defer rows.Close()
+	columnTypes, _ := rows.ColumnTypes()
+	rows.Close()
 
 	stmt, err := h.DB.Prepare("SELECT EXTRA FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?")
 	__err_500(err, w)
 	defer stmt.Close()
-	columnTypes, _ := rows.ColumnTypes()
+
 	var extra string
 	var idName string
 	for _, col := range columnTypes {
@@ -71,7 +72,7 @@ func (h DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		if r.URL.Path == "/" {
-			h.ShowTables(w, r)
+			h.ShowTables(w, r, tables)
 		}
 		if len(parts) == 1 && parts[len(parts)-1] != "" {
 			tableName := parts[0]
@@ -126,24 +127,16 @@ func (h DbExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h DbExplorer) ShowTables(w http.ResponseWriter, r *http.Request) {
-	rows, err := h.DB.Query("SHOW TABLES")
-	__err_500(err, w)
-	defer rows.Close()
-
-	var tables []string
-	for rows.Next() {
-		var tableName string
-		err = rows.Scan(&tableName)
-		__err_500(err, w)
-
-		tables = append(tables, tableName)
+func (h DbExplorer) ShowTables(w http.ResponseWriter, r *http.Request, tables map[string]bool) {
+	var tablesSlice []string
+	for key, _ := range tables {
+		tablesSlice = append(tablesSlice, key)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(map[string]interface{}{
+	err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"response": map[string]interface{}{
-			"tables": tables,
+			"tables": tablesSlice,
 		},
 	})
 	__err_500(err, w)
@@ -248,7 +241,7 @@ func (h DbExplorer) AddRecord(w http.ResponseWriter, r *http.Request, tableName 
 	query := fmt.Sprintf("SELECT * FROM `%s`", tableName)
 	rows, _ := h.DB.Query(query)
 	columnTypes, _ := rows.ColumnTypes()
-	defer rows.Close()
+	rows.Close()
 
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
@@ -328,7 +321,7 @@ func (h DbExplorer) UpdateRecord(w http.ResponseWriter, r *http.Request, tableNa
 	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT 1", tableName)
 	rows, _ := h.DB.Query(query)
 	columnTypes, _ := rows.ColumnTypes()
-	defer rows.Close()
+	rows.Close()
 
 	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
